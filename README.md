@@ -14,7 +14,7 @@ please use a more reliable global state management package which npm has a [plet
 ### Setup
 ```javascript
 // in "src/contexts/myStore";
-import pStore from "pStore";
+import Store from "pStore";
 const initWallet = {  
   sideMenu: false,  
   preview: false,

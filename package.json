@@ -1,8 +1,11 @@
 {
   "name": "pstore",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A state management library mostly for react and convenience",
-  "main": "index.js",
+  "main": "./build/index.js",
+	"files": [
+		"build"
+	],
   "scripts": {
     "build": "webpack"
   },
