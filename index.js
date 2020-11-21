@@ -6,16 +6,29 @@
  * but at a price of hours of getting it to work
  */
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import each from "lodash/each";
+//  lodash
 // import every from "lodash/every";
 import includes from "lodash/includes";
-import each from "lodash/each";
-import isObject from "lodash/isObject";
-import getKeys from "lodash/keys";
-import isUndefined from "lodash/isUndefined";
 import isFunction from "lodash/isFunction";
+import isNil from "lodash/isNil";
+import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
+import getKeys from "lodash/keys";
+import isArray from "lodash/isArray";
+import {useCallback, useEffect, useMemo, useState} from "react";
+
+// TODO
+//  do some code splitting when you publish this
 
 const cloneDeep = require("rfdc")({proto: true, circles: true});
+
+//  because using document events doesn't work on SSG / SSR
+const Emitter = require("events");
+const EventEmitter = new Emitter();
+
+//  virtually no limit for listeners
+EventEmitter.setMaxListeners(Number.MAX_SAFE_INTEGER);
 
 export default class Store {
   #store;
@@ -27,72 +40,168 @@ export default class Store {
     useHooks: true,
     useEventListener: false,
     debugMode: false,
-    immutable: true,
+    immutable: false,
+    typeChecks: false,
   };
 
-  constructor(initValue = {}, inputOptions = Store.defaultOptions, key = null) {
-    if (!isObject(initValue)) throw new Error(`[jStore] non-object value given to initValue`);
+  constructor(initValue = {}, key = null, inputOptions = Store.defaultOptions) {
+    if (!isObject(initValue)) throw new Error(`[pStore] non-object value given to initValue`);
     const options = {...Store.defaultOptions, ...inputOptions};
+    //  force debugMode off on production
+    if (process.env.NODE_ENV === "production" && options.debugMode) options.debugMode = false;
+
     const keys = getKeys(initValue);
 
     this.#storeKey = key ? key : Store.customEventCnt++;
-    if (options.debugMode) console.log(`[jStore debug {${this.#storeKey}}] making store with key ${this.#storeKey}`);
+    if (options.debugMode) console.log(`[pStore debug {${this.#storeKey}}] making store with key ${this.#storeKey}`);
 
-    const eventName = key ? key : `jStoreEvent-${this.#storeKey}`;
+    const eventName = key ? key : `pStoreEvent-${this.#storeKey}`;
 
     this.#store = cloneDeep(initValue);
-
     this.#storeProxy = new Proxy(this.#store, {
       set: function (obj, prop, value) {
-        if (options.debugMode) console.log(`[jStore debug] SET -`, {prop, value});
+        if (options.debugMode) console.log(`[pStore debug] SET -`, {prop, value});
         if (options.preventExtensions && !includes(keys, prop)) {
           if (options.debugMode)
-            console.log(`[jStore debug] SET fail - attempted to extend with preventExtensions true`);
+            console.log(`[pStore debug] SET fail - attempted to extend with preventExtensions true`);
           return true;
         }
-        // console.log(obj, prop, value);
-        //  checks
+        if (options.typeChecks) {
+          // TODO : fix this to be more human friendly(because js says null is a bloody object)
+          if (typeof obj[prop] !== typeof value) {
+            if (options.debugMode)
+              console.log(
+                `[pStore debug] SET fail - type mismatch, attempted to set ${prop} to {${typeof value}} when type was {${typeof obj[
+                  prop
+                  ]}}`
+              );
+            return true;
+          }
+        }
+
         obj[prop] = value;
         return true;
       },
       get: function (target, prop, receiver) {
         const obj = Reflect.get(...arguments);
-        Store.optionalReturn(obj, options);
+        return Store.optionalReturn(obj, options);
       },
     });
 
-    this.updateStore = obj => {
-      if (!isObject(obj)) return console.warn(`[jStore] Update ignored, not an object - ${obj}`);
-      // merge(this.#storeProxy, obj);
-      each(getKeys(obj), key => (this.#storeProxy[key] = obj[key]));
-      Store.DispatchEvent(eventName);
-      console.log("updateStore", eventName);
+    //  obj may not be an object if targetKey is defined.
+    this.updateStore = (obj, targetKey, updateOptions = {callback: false, silent: false}) => {
+      // for multiple updates with array
+      if (isArray(obj)) {
+        each(obj, paramArray => {
+          if (!isArray(paramArray)) {
+            console.warn(`[pStore {${this.#storeKey}} MultiUpdate] ignored, expected array of params -`, paramArray);
+            return;
+          }
+          //  setting silent to true if options exist
+          const silentObj = {silent: true};
+          if (paramArray.length === 3) {
+            if (!isObject(paramArray[2])) {
+              if (options.debugMode)
+                console.warn(
+                  `[pStore debug {${this.#storeKey}} MultiUpdate] options was not an object - overwriting -`,
+                  paramArray
+                );
+              paramArray[2] = {silent: true};
+            } else {
+              const newOptions = {...paramArray.pop(), ...silentObj};
+              paramArray.push(newOptions);
+            }
+          } else if (paramArray.length === 2) {
+            paramArray.push(silentObj);
+          } else if (paramArray.length === 1) {
+            paramArray.push(null, silentObj);
+          }
+          this.updateStore(...paramArray);
+        });
+        //  make sure above has finished?...
+        setTimeout(() => {
+          // TODO
+          //  pick out which keys are updated and make array, switch out keys
+          //  currently all keys are updated
+          if (!updateOptions.silent) Store.DispatchEvent(eventName, keys);
+        }, 0);
+        return;
+      }
+
+      //  actual update logic
+      let updateKeys;
+      if (!isObject(obj) && isNil(targetKey))
+        return console.warn(
+          `[pStore {${this.#storeKey}}] Update ignored, not an object and targetKey undefined - ${obj}`
+        );
+      if (isNil(targetKey)) {
+        // merge(this.#storeProxy, obj);
+        updateKeys = getKeys(obj);
+        each(updateKeys, key => (this.#storeProxy[key] = obj[key]));
+      }
+        //  single updates
+        //  update by callback
+        // Dev notes - if you're resorting to using this with complicated logic,
+        // it is probably recommended to use Redux
+      // return undefined to cancel
+      else if (updateOptions?.callback === true) {
+        if (isFunction(obj)) {
+          const curValue = cloneDeep(this.#store[targetKey]);
+          let newValue;
+          try {
+            newValue = obj(curValue);
+          } catch (ex) {
+            console.warn(`[pStore {${this.#storeKey}}] Exception occurred while updating by callback - {${targetKey}}`);
+            console.log(obj);
+          }
+          if (isUndefined(newValue)) return;
+          this.#storeProxy[targetKey] = newValue;
+          updateKeys = [targetKey];
+        }
+      }
+      //  update by key
+      else {
+        if (isObject(targetKey) || !includes(keys, targetKey))
+          return console.warn(`[pStore {${this.#storeKey}}] Update ignored, targetKey was not found - ${targetKey}`);
+
+        // TODO
+        //  currently merges by default, might also have options for different behaviour in the future
+        this.#storeProxy[targetKey] = {...this.#store[targetKey], ...obj};
+        updateKeys = [targetKey];
+        Store.DispatchEvent(eventName, [targetKey]);
+      }
+      if (!updateOptions.silent) Store.DispatchEvent(eventName, updateKeys);
     };
 
     if (!options.useHooks) {
-      this.createUseStore = () => throw new Error("[jStore] Hooks were not enabled, enable by setting 'useHooks' to true in options");
+      this.createUseStore = () =>
+        throw new Error(
+          `[pStore {${this.#storeKey}}] Hooks were not enabled, enable by setting 'useHooks' to true in options`
+        );
       return;
     } else {
+      //  create useStore hook for React
       this.createUseStore = () => watch => {
         const [dummy, setDummy] = useState(false);
         const rerender = useCallback(() => setDummy(v => !v), [setDummy]);
 
         //  verify property to watch is valid
         useEffect(() => {
+          if (watch === "") return; //  ignore updating logic if watch is empty string
           if (!isUndefined(watch) && isUndefined(this.#store[watch]))
             throw new Error(`${watch} is not a watchable property`);
-          const eventHandler = e => {
-            //  prevent useless stuff from happening
-            e.preventDefault();
-            e.stopPropagation();
+          const eventHandler = keys => {
+            //  if edited keys are not being watched, don't rerender
+            if (watch && !includes(keys, watch)) return;
             rerender();
           };
-          document.addEventListener(eventName, eventHandler);
-          return () => document.removeEventListener(eventName, eventHandler);
+          EventEmitter.on(eventName, eventHandler);
+          return () => EventEmitter.removeListener(eventName, eventHandler);
         }, [watch, rerender]);
 
-        const updateLayout = useCallback(obj => this.updateStore(obj), []);
+        const updateLayout = useCallback((...params) => this.updateStore(...params), []);
         return useMemo(() => {
+          if (watch === "") return updateLayout;
           return [Store.optionalReturn(watch ? this.#store[watch] : this.#store, options), updateLayout];
           //  ignored on purpose
           // eslint-disable-next-line
@@ -102,50 +211,68 @@ export default class Store {
     if (!options.useEventListener) {
       this.bindEvent = () =>
         throw new Error(
-          `[jStore {${
+          `[pStore {${
             this.#storeKey
           }}] event listener were not enabled, enable by setting 'useEventListener' to true in options`
         );
       this.unbindEvent = () =>
         throw new Error(
-          `[jStore ${
+          `[pStore ${
             this.#storeKey
           }] event listener were not enabled, enable by setting 'useEventListener' to true in options`
         );
     } else {
+      //  bindable events for non-react savvy users
       this.bindEvent = handler => {
-        if (!isFunction(handler)) throw new Error(`[jStore {${this.#storeKey}}] bindEvent needs a function input`);
-        if (options.debugMode) console.log(`[jStore debug {${this.#storeKey}}] handler bound`);
-        document.addEventListener(eventName, handler);
+        if (!isFunction(handler)) throw new Error(`[pStore {${this.#storeKey}}] bindEvent needs a function input`);
+        if (options.debugMode) console.log(`[pStore debug {${this.#storeKey}}] handler bound`);
+
+        EventEmitter.on(eventName, handler);
       };
       this.unbindEvent = handler => {
-        if (!isFunction(handler)) throw new Error(`[jStore {${this.#storeKey}}] unbindEvent needs a function input`);
-        if (options.debugMode) console.log(`[jStore debug {${this.#storeKey}}] handler unbound`);
-        document.removeEventListener(eventName, handler);
+        if (!isFunction(handler)) throw new Error(`[pStore {${this.#storeKey}}] unbindEvent needs a function input`);
+        if (options.debugMode) console.log(`[pStore debug {${this.#storeKey}}] handler unbound`);
+        EventEmitter.removeListener(eventName, handler);
       };
     }
+    this.getValue = this.getValue.bind(this);
   }
 
-  set storeProxy(obj) {
-    if (!isObject(obj)) return throw new Error(`[jStore] tried to SET store proxy with non-object`);
-    this.updateStore(obj);
-  }
+  //  get the storeProxy itself if you know what you're doing
   get storeProxy() {
     return this.#storeProxy;
   }
+
+  //  safe public get store
   get getStore() {
-    return () => cloneDeep(this.#store);
+    //  probably need some enhancements might not be optimal
+    return () => Object.freeze({...this.#store});
+  }
+
+  //  private unsafe get store
+  get _getStore() {
+    return this.#store;
+  }
+
+  getValue(key) {
+    //  because of private member limitations
+    const store = this._getStore;
+    if (isUndefined(store[key])) {
+      console.warn(`[pStore {${this.#storeKey}}] key not found, returning null for key[${key}]`);
+      return null;
+    }
+    return cloneDeep(store[key]);
   }
 
   //  event dispatcher
-  static DispatchEvent(eventName) {
-    const ev = new CustomEvent(eventName, {cancelable: true});
-    document.dispatchEvent(ev);
+  static DispatchEvent(eventName, keys) {
+    // console.log("event emit - ", eventName);
+    EventEmitter.emit(eventName, keys);
   }
 
   //  return value with options applied
   static optionalReturn(value, options = this.defaultOptions) {
-    if (!isObject(options)) return throw new Error(`[jStore] called optionalReturn with non-object options`);
+    if (!isObject(options)) return throw new Error(`[pStore] called optionalReturn with non-object options`);
     if (options.immutable) {
       if (isObject(value)) return Object.freeze(value);
       return value;
@@ -166,7 +293,7 @@ export default class Store {
 // const createStore(initObj, options = defaultOptions, key) {
 // 	const layoutKeys = getKeys(initObj);
 // 	const layout = cloneDeep(initObj);
-// 	const eventName = key ? key : `jStoreEvent-${customEventCnt++}`;
+// 	const eventName = key ? key : `pStoreEvent-${customEventCnt++}`;
 // 	const layoutProxy = new Proxy(layout, {
 // 		set: function (obj, prop, value) {
 // 			obj[prop] = value;

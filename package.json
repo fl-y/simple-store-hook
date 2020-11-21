@@ -1,24 +1,30 @@
 {
-  "name": "simple-store-hook",
+  "name": "pstore",
   "version": "1.0.0",
-  "description": "simple store for React",
+  "description": "A state management library mostly for react and convenience",
   "main": "index.js",
   "scripts": {
-    "build": "webpack",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "webpack"
   },
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/fl-y/simple-store-hook"
+	},
   "keywords": [
+		"pstore",
     "react",
-    "store",
-    "simple",
     "store",
     "hooks",
-    "react",
-    "store"
+		"state management",
+		"global state management",
+		"hook",
+		"react hooks",
+		"react hook"
   ],
-  "author": "joon",
+	"author": "thedigitalimg@gmail.com",
   "license": "MIT",
   "dependencies": {
+    "events": "^3.2.0",
     "react": "^17.0.1",
     "rfdc": "^1.1.4"
   },
