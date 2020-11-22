@@ -85,7 +85,7 @@ export default function Something() {
 		//	specifing second parameter does nothing atm.
 		updateMyStore([
 			[{sideMenu:true}],	//	enter params like single update in array form
-			[v => !v, "preview"]
+			[v => !v, "preview", {callback: true}]
 		]);
 	}, [updateMyStore]);
 }
