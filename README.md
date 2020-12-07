@@ -1,6 +1,7 @@
 
 # pStore   
-Global / local state management with js proxies, originally made for React hooks but can be used without.  
+Global / local state management with js proxies, originally made for React hooks but can be used without.
+As of v1.1.0 Currently under active development after discovering concerning bugs - should not be used by anyone or any project at the moment.
   
 ### Disclaimer  
 This package was not intended to replace redux.  
