@@ -2,6 +2,11 @@ src
 demo
 .babelrc
 webpack.config.js
+tsconfig.build.json
+tsconfig.json.js
+utils.d.ts
 
 .idea
 node_modules
+yarn-error.log
+yarn.lock
