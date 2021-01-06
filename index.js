@@ -240,7 +240,7 @@ export default class Store {
 		if (isArray(key)) {
 			const obj = {};
 			each(key, value => {
-				obj[key] = this.getValue(key);
+				obj[value] = this.getValue(value);
 			});
 			return obj;
 		}
