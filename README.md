@@ -3,6 +3,11 @@
 Global / local state management with js proxies, originally made for React hooks but can be used without.
 As of v1.1.0 Currently under active development after discovering concerning bugs - should not be used by anyone or any project at the moment.
   
+### Updates
+- v1.1.0 - declared this repo not usable yet
+- v1.1.1 - Error fixes
+- v1.1.2 - Added some types for autocomplete
+
 ### Disclaimer  
 This package was not intended to replace redux.  
 If your project has any level of complex logic that is best stored globally,  
