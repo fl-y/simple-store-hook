@@ -25,6 +25,10 @@ const EventEmitter = new Emitter();
 //  virtually no limit for listeners
 EventEmitter.setMaxListeners(Number.MAX_SAFE_INTEGER);
 
+/**
+ * @desc Store class
+ * @namespace pstore
+ */
 export default class Store {
 	#store;
 	#storeProxy;
@@ -40,6 +44,14 @@ export default class Store {
 		deepCompare: false,
 	};
 	
+	/**
+	 * The contructor
+	 * @param initValue {Object}
+	 * @param key {String}
+	 * @param inputOptions {Object}
+	 * @namespace pstore.constructor
+	 * @memberof pstore
+	 */
 	constructor(initValue = {}, key = null, inputOptions = Store.defaultOptions) {
 		if (!isObject(initValue)) throw new Error(`[pStore] non-object value given to initValue`);
 		const options = {...Store.defaultOptions, ...inputOptions};
@@ -85,7 +97,15 @@ export default class Store {
 			},
 		});
 		
-		//  obj may not be an object if targetKey is defined.
+		/**
+		 * @desc function that updates store
+		 * @memberof pstore.constructor
+		 * @method updateStore
+		 * @type function
+		 * @param obj
+		 * @param targetKey
+		 * @param updateOptions
+		 */
 		this.updateStore = (obj, targetKey, updateOptions = {callback: false, silent: false}) => {
 			// for multiple updates with array
 			if (isArray(obj)) {
@@ -168,7 +188,12 @@ export default class Store {
 			}
 			if (!updateOptions.silent) Store.DispatchEvent(eventName, updateKeys);
 		};
-		//  create useStore hook for React
+		/**
+		 * @desc create useStore hook for React
+		 * @memberof pstore.constructor
+		 * @type function
+		 * @returns {function(*=): unknown}
+		 */
 		this.createUseStore = () => watch => {
 			const [dummy, setDummy] = useState(false);
 			const rerender = useCallback(() => setDummy(v => !v), [setDummy]);
@@ -221,11 +246,23 @@ export default class Store {
 	}
 	
 	//  get the storeProxy itself if you know what you're doing
+	/**
+	 * @method storeProxy
+	 * @type function
+	 * @memberof pstore
+	 * @returns {object}
+	 */
 	get storeProxy() {
 		return this.#storeProxy;
 	}
 	
 	//  safe public get store
+	/**
+	 * @method getStore
+	 * @type function
+	 * @memberof pstore
+	 * @returns {function(): *|Date|{}}
+	 */
 	get getStore() {
 		return () => Store.optionalReturn(this.#store, this.#options);
 	}
@@ -235,6 +272,13 @@ export default class Store {
 		return this.#store;
 	}
 	
+	/**
+	 * @desc returns target value from key
+	 * @method getValue
+	 * @type function
+	 * @param key {{string}|{array}}
+	 * @returns {{}|null|*}
+	 */
 	getValue(key) {
 		//  because of private member limitations
 		if (isArray(key)) {
