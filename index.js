@@ -154,7 +154,9 @@ export default class Store {
 			if (isNil(targetKey)) {
 				// merge(this.#storeProxy, obj);
 				updateKeys = getKeys(obj);
-				each(updateKeys, key => (this.#storeProxy[key] = obj[key]));
+				each(updateKeys, key => {
+					this.#storeProxy[key] = obj[key];
+				});
 			}
 				//  single updates
 				//  update by callback
